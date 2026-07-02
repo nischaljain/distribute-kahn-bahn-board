@@ -86,6 +86,15 @@ Tab 1 ──WebSocket──► Server A          (browser ↔ server link = WebS
 - Favor clarity over cleverness in the code itself — it should read like a teaching example.
 - Check understanding before moving to the next concept; don't rush ahead phases.
 
+## Behavioral guidelines
+
+- **Simplicity first:** Always choose the simplest solution that works. Don't reach for advanced
+  design patterns or over-engineer unless a concrete need makes it necessary.
+- **Surgical changes only:** Touch only the lines and files needed for the task at hand. No
+  speculative refactors or unrelated edits.
+- **Think before coding:** Understand the current architecture and existing abstractions before
+  writing new code.
+
 ## Commands
 
 _To be filled in as Phase 1 takes shape (run server, run tests, start Kafka via docker-compose,
