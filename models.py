@@ -38,6 +38,14 @@ class Column(db.Model):
         order_by="Task.position",
     )
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "position": self.position,
+            "board_id": self.board_id,
+        }
+
     def __repr__(self):
         return f"<Column {self.id} {self.name!r}>"
 
