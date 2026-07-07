@@ -45,7 +45,14 @@ def board(board_id):
         db.session.commit()
         return "", 204
 
-    return jsonify(board.to_dict())
+    # A single-board GET returns the full nested tree so the UI can render
+    # the whole board from one request.
+    board_data = board.to_dict()
+    board_data["columns"] = [
+        {**column.to_dict(), "tasks": [task.to_dict() for task in column.tasks]}
+        for column in board.columns
+    ]
+    return jsonify(board_data)
 
 
 @app.route("/api/boards/<int:board_id>/columns", methods=["GET", "POST"])

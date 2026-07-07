@@ -12,37 +12,8 @@
       <h1 class="text-xl font-semibold text-slate-800">Kanban Board</h1>
     </header>
 
-    <main class="p-6 flex gap-4 items-start overflow-x-auto">
-      <!-- To Do -->
-      <section class="w-72 shrink-0 bg-slate-200 rounded-lg p-3">
-        <h2 class="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-3">To Do</h2>
-        <div class="space-y-2">
-          <article class="bg-white rounded-md shadow-sm p-3 text-sm text-slate-700">Set up the project</article>
-          <article class="bg-white rounded-md shadow-sm p-3 text-sm text-slate-700">Design the database schema</article>
-        </div>
-      </section>
+    <main id="board" class="p-6 flex gap-4 items-start overflow-x-auto"></main>
 
-      <!-- In Progress -->
-      <section class="w-72 shrink-0 bg-slate-200 rounded-lg p-3">
-        <h2 class="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-3">In Progress</h2>
-        <div class="space-y-2">
-          <article class="bg-white rounded-md shadow-sm p-3 text-sm text-slate-700">Build the REST API</article>
-        </div>
-      </section>
-
-      <!-- Code Review -->
-      <section class="w-72 shrink-0 bg-slate-200 rounded-lg p-3">
-        <h2 class="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-3">Code Review</h2>
-        <div class="space-y-2"></div>
-      </section>
-
-      <!-- Done -->
-      <section class="w-72 shrink-0 bg-slate-200 rounded-lg p-3">
-        <h2 class="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-3">Done</h2>
-        <div class="space-y-2">
-          <article class="bg-white rounded-md shadow-sm p-3 text-sm text-slate-700">Write CLAUDE.md</article>
-        </div>
-      </section>
-    </main>
+    <script src="/static/board.js"></script>
   </body>
 </html>
