@@ -1,5 +1,7 @@
 const BOARD_ID = 1;
 
+let draggedTaskId = null;
+
 async function loadBoard() {
   const response = await fetch(`/api/boards/${BOARD_ID}`);
   const board = await response.json();
@@ -16,6 +18,14 @@ async function createTask(columnId, title) {
 
 async function deleteTask(taskId) {
   await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+}
+
+async function moveTask(taskId, columnId, position) {
+  await fetch(`/api/tasks/${taskId}/move`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ column_id: columnId, position }),
+  });
 }
 
 function renderBoard(board) {
@@ -43,13 +53,31 @@ function renderColumn(column) {
   section.appendChild(list);
 
   section.appendChild(renderAddForm(column));
+
+  // A column is a drop zone: allow the drop, then move the card to its end.
+  section.addEventListener("dragover", (event) => {
+    event.preventDefault();
+  });
+  section.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    if (draggedTaskId === null) return;
+    const position = column.tasks.filter((task) => task.id !== draggedTaskId).length;
+    await moveTask(draggedTaskId, column.id, position);
+    draggedTaskId = null;
+    await loadBoard();
+  });
+
   return section;
 }
 
 function renderCard(task) {
   const card = document.createElement("article");
   card.className =
-    "bg-white rounded-md shadow-sm p-3 text-sm text-slate-700 flex justify-between items-start gap-2";
+    "bg-white rounded-md shadow-sm p-3 text-sm text-slate-700 flex justify-between items-start gap-2 cursor-grab";
+  card.draggable = true;
+  card.addEventListener("dragstart", () => {
+    draggedTaskId = task.id;
+  });
 
   const title = document.createElement("span");
   title.textContent = task.title;
