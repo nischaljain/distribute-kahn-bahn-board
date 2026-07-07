@@ -1,6 +1,6 @@
 """Application entry point for the Kanban board server."""
 
-from flask import Flask, abort, jsonify, request
+from flask import Flask, abort, jsonify, render_template, request
 
 from models import Board, Column, Task, db
 
@@ -12,7 +12,7 @@ db.init_app(app)
 
 @app.route("/")
 def home():
-    return "Kanban board server is running."
+    return render_template("index.html")
 
 
 @app.route("/api/boards", methods=["GET", "POST"])
