@@ -116,8 +116,6 @@ def task(task_id):
             task.title = data["title"]
         if "description" in data:
             task.description = data["description"]
-        if "position" in data:
-            task.position = data["position"]
         db.session.commit()
         return jsonify(task.to_dict())
 
@@ -126,6 +124,31 @@ def task(task_id):
         db.session.commit()
         return "", 204
 
+    return jsonify(task.to_dict())
+
+
+@app.route("/api/tasks/<int:task_id>/move", methods=["PATCH"])
+def move_task(task_id):
+    task = db.session.get(Task, task_id) or abort(404)
+    data = request.get_json() or {}
+    if "column_id" not in data or "position" not in data:
+        abort(400, "column_id and position are required")
+    target_column = db.session.get(Column, data["column_id"]) or abort(404)
+    target_position = data["position"]
+
+    # Close the gap the task leaves behind in its current column.
+    for sibling in task.column.tasks:
+        if sibling.position > task.position:
+            sibling.position -= 1
+
+    # Open a gap in the target column at the requested position.
+    task.column = target_column
+    for sibling in target_column.tasks:
+        if sibling is not task and sibling.position >= target_position:
+            sibling.position += 1
+
+    task.position = target_position
+    db.session.commit()
     return jsonify(task.to_dict())
 
 
