@@ -97,5 +97,24 @@ Tab 1 ──WebSocket──► Server A          (browser ↔ server link = WebS
 
 ## Commands
 
-_To be filled in as Phase 1 takes shape (run server, run tests, start Kafka via docker-compose,
-run multiple nodes). Left intentionally empty until the code exists._
+The dev server runs on **port 5001**, not 5000: on macOS, port 5000 is taken by the AirPlay
+Receiver (ControlCenter), which causes confusing "Address already in use" / phantom-server bugs.
+
+```bash
+# One-time setup
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
+
+# Run the server (http://127.0.0.1:5001)
+./venv/bin/python app.py
+
+# Stop it — kill by PORT, not by name. `pkill -f "python app.py"` misses the
+# macOS framework Python (its process is "Python app.py" with a capital P).
+lsof -tiTCP:5001 -sTCP:LISTEN | xargs kill -9
+
+# Quick API smoke test
+curl -s -X POST http://127.0.0.1:5001/api/boards \
+  -H "Content-Type: application/json" -d '{"name":"Test Board"}'
+```
+
+_Kafka (docker-compose) and multi-node commands to be added in Phase 3._
