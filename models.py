@@ -17,6 +17,9 @@ class Board(db.Model):
         order_by="Column.position",
     )
 
+    def to_dict(self):
+        return {"id": self.id, "name": self.name}
+
     def __repr__(self):
         return f"<Board {self.id} {self.name!r}>"
 
