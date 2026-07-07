@@ -6,6 +6,18 @@ async function loadBoard() {
   renderBoard(board);
 }
 
+async function createTask(columnId, title) {
+  await fetch(`/api/columns/${columnId}/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+}
+
+async function deleteTask(taskId) {
+  await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+}
+
 function renderBoard(board) {
   const container = document.getElementById("board");
   container.innerHTML = "";
@@ -30,14 +42,49 @@ function renderColumn(column) {
   }
   section.appendChild(list);
 
+  section.appendChild(renderAddForm(column));
   return section;
 }
 
 function renderCard(task) {
   const card = document.createElement("article");
-  card.className = "bg-white rounded-md shadow-sm p-3 text-sm text-slate-700";
-  card.textContent = task.title;
+  card.className =
+    "bg-white rounded-md shadow-sm p-3 text-sm text-slate-700 flex justify-between items-start gap-2";
+
+  const title = document.createElement("span");
+  title.textContent = task.title;
+  card.appendChild(title);
+
+  const remove = document.createElement("button");
+  remove.textContent = "×";
+  remove.className = "text-slate-400 hover:text-red-500 leading-none";
+  remove.addEventListener("click", async () => {
+    await deleteTask(task.id);
+    await loadBoard();
+  });
+  card.appendChild(remove);
+
   return card;
+}
+
+function renderAddForm(column) {
+  const form = document.createElement("form");
+  form.className = "mt-2";
+
+  const input = document.createElement("input");
+  input.className = "w-full rounded-md border border-slate-300 px-2 py-1 text-sm";
+  input.placeholder = "+ Add a card";
+  form.appendChild(input);
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const title = input.value.trim();
+    if (!title) return;
+    await createTask(column.id, title);
+    await loadBoard();
+  });
+
+  return form;
 }
 
 loadBoard();
