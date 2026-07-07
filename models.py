@@ -59,5 +59,14 @@ class Task(db.Model):
 
     column = db.relationship("Column", back_populates="tasks")
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "position": self.position,
+            "column_id": self.column_id,
+        }
+
     def __repr__(self):
         return f"<Task {self.id} {self.title!r}>"
