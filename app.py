@@ -1,6 +1,7 @@
 """Application entry point for the Kanban board server."""
 
 from flask import Flask, abort, jsonify, render_template, request
+from flask_socketio import SocketIO
 
 from models import Board, Column, Task, db
 
@@ -8,6 +9,9 @@ app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///kanban.db"
 
 db.init_app(app)
+
+# Adds a WebSocket layer for broadcasting to connected browsers; REST routes unchanged.
+socketio = SocketIO(app)
 
 
 @app.route("/")
@@ -162,4 +166,6 @@ def move_task(task_id):
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    app.run(debug=True, port=5001)
+    # socketio.run replaces app.run to handle the WebSocket upgrade handshake.
+    # allow_unsafe_werkzeug: opt in to the dev server for WebSockets (local only).
+    socketio.run(app, debug=True, port=5001, allow_unsafe_werkzeug=True)
