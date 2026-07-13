@@ -29,6 +29,11 @@ def on_disconnect():
     print("WebSocket client disconnected", flush=True)
 
 
+def broadcast_board_changed():
+    """Push a change signal to every connected browser so each re-fetches."""
+    socketio.emit("board_changed")
+
+
 @app.route("/api/boards", methods=["GET", "POST"])
 def boards():
     if request.method == "POST":
@@ -122,6 +127,7 @@ def tasks(column_id):
         )
         db.session.add(task)
         db.session.commit()
+        broadcast_board_changed()
         return jsonify(task.to_dict()), 201
 
     return jsonify([task.to_dict() for task in column.tasks])
@@ -143,6 +149,7 @@ def task(task_id):
     if request.method == "DELETE":
         db.session.delete(task)
         db.session.commit()
+        broadcast_board_changed()
         return "", 204
 
     return jsonify(task.to_dict())
@@ -170,6 +177,7 @@ def move_task(task_id):
 
     task.position = target_position
     db.session.commit()
+    broadcast_board_changed()
     return jsonify(task.to_dict())
 
 

@@ -5,6 +5,11 @@ let draggedTaskId = null;
 // Open a persistent WebSocket to this server (via the Socket.IO client).
 const socket = io();
 
+// The server broadcasts this when any tab changes the board; re-fetch to sync.
+socket.on("board_changed", () => {
+  loadBoard();
+});
+
 async function loadBoard() {
   const response = await fetch(`/api/boards/${BOARD_ID}`);
   const board = await response.json();
