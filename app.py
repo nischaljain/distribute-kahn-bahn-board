@@ -19,6 +19,16 @@ def home():
     return render_template("index.html")
 
 
+@socketio.on("connect")
+def on_connect():
+    print("WebSocket client connected", flush=True)
+
+
+@socketio.on("disconnect")
+def on_disconnect():
+    print("WebSocket client disconnected", flush=True)
+
+
 @app.route("/api/boards", methods=["GET", "POST"])
 def boards():
     if request.method == "POST":

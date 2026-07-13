@@ -2,6 +2,9 @@ const BOARD_ID = 1;
 
 let draggedTaskId = null;
 
+// Open a persistent WebSocket to this server (via the Socket.IO client).
+const socket = io();
+
 async function loadBoard() {
   const response = await fetch(`/api/boards/${BOARD_ID}`);
   const board = await response.json();
