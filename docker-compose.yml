@@ -1,0 +1,29 @@
+# Runs a single-node Apache Kafka broker for local development.
+# Start:  docker compose up -d
+# Stop:   docker compose down
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: kafka
+    ports:
+      # host:container — lets our Flask app (on the host) reach Kafka at localhost:9092.
+      - "9092:9092"
+    environment:
+      # --- Identity & roles (KRaft mode: no separate ZooKeeper needed) ---
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+
+      # --- Listeners: which ports Kafka opens and how clients are told to reach it ---
+      # Empty host = bind all interfaces (reachable via the port mapping) without the
+      # literal 0.0.0.0, which Kafka rejects as a non-routable advertised address.
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+
+      # --- Single-broker defaults: with only one node, everything must be 1 ---
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0

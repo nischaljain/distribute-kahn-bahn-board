@@ -117,4 +117,12 @@ curl -s -X POST http://127.0.0.1:5001/api/boards \
   -H "Content-Type: application/json" -d '{"name":"Test Board"}'
 ```
 
-_Kafka (docker-compose) and multi-node commands to be added in Phase 3._
+```bash
+# Kafka (Phase 3) — needs Docker Desktop running
+docker compose up -d      # start the single Kafka broker (KRaft mode, port 9092)
+docker compose ps         # check it's Up
+docker logs kafka         # broker logs; look for "Kafka Server started"
+docker compose down       # stop and remove it
+```
+
+_Multi-node Flask commands to be added as Phase 3 progresses._
