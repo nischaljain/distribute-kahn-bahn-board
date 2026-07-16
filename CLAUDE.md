@@ -123,6 +123,11 @@ docker compose up -d      # start the single Kafka broker (KRaft mode, port 9092
 docker compose ps         # check it's Up
 docker logs kafka         # broker logs; look for "Kafka Server started"
 docker compose down       # stop and remove it
+
+# Create the event topic (no named volume, so `down` deletes it — recreate after each up).
+docker exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --create --topic board-events --partitions 1 --replication-factor 1 \
+  --bootstrap-server localhost:9092
 ```
 
 _Multi-node Flask commands to be added as Phase 3 progresses._

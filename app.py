@@ -1,9 +1,15 @@
 """Application entry point for the Kanban board server."""
 
+import json
+
 from flask import Flask, abort, jsonify, render_template, request
 from flask_socketio import SocketIO
+from kafka import KafkaProducer
 
 from models import Board, Column, Task, db
+
+KAFKA_BROKER = "localhost:9092"
+BOARD_EVENTS_TOPIC = "board-events"
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///kanban.db"
@@ -12,6 +18,13 @@ db.init_app(app)
 
 # Adds a WebSocket layer for broadcasting to connected browsers; REST routes unchanged.
 socketio = SocketIO(app)
+
+# One producer for the app's lifetime — connections are expensive to open per request.
+# value_serializer turns each Python event into the JSON bytes Kafka stores on the wire.
+producer = KafkaProducer(
+    bootstrap_servers=KAFKA_BROKER,
+    value_serializer=lambda event: json.dumps(event).encode("utf-8"),
+)
 
 
 @app.route("/")
@@ -29,8 +42,14 @@ def on_disconnect():
     print("WebSocket client disconnected", flush=True)
 
 
+def publish_board_changed():
+    """Producer role: append a change event to the topic. Called after a DB commit."""
+    producer.send(BOARD_EVENTS_TOPIC, {"type": "board_changed"})
+
+
 def broadcast_board_changed():
-    """Push a change signal to every connected browser so each re-fetches."""
+    """Push a change signal to every connected browser so each re-fetches.
+    Only the Kafka consumer calls this — keeps a single broadcast path."""
     socketio.emit("board_changed")
 
 
@@ -127,7 +146,7 @@ def tasks(column_id):
         )
         db.session.add(task)
         db.session.commit()
-        broadcast_board_changed()
+        publish_board_changed()
         return jsonify(task.to_dict()), 201
 
     return jsonify([task.to_dict() for task in column.tasks])
@@ -149,7 +168,7 @@ def task(task_id):
     if request.method == "DELETE":
         db.session.delete(task)
         db.session.commit()
-        broadcast_board_changed()
+        publish_board_changed()
         return "", 204
 
     return jsonify(task.to_dict())
@@ -177,7 +196,7 @@ def move_task(task_id):
 
     task.position = target_position
     db.session.commit()
-    broadcast_board_changed()
+    publish_board_changed()
     return jsonify(task.to_dict())
 
 
