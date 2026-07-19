@@ -3,7 +3,10 @@
 A Trello-style task board where changes appear instantly — across every open browser tab, **and
 across independent server processes that share no memory**.
 
-> **Live demo:** _(link to be added after deployment)_
+> **Live demo:** **https://distribute-kahn-bahn-board.onrender.com**
+>
+> ⏳ Hosted on a free tier that sleeps when idle — **the first load can take 30–60 seconds**
+> while the service wakes up. It's not broken, just cold. Subsequent loads are instant.
 >
 > The hosted version runs as a **single node**, so Kafka is inactive there. To see the
 > distributed behaviour — the actual point of this project — run it locally with two nodes
