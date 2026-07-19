@@ -266,7 +266,9 @@ if __name__ == "__main__":
     # consumer that steals events while holding no WebSocket connections.
     socketio.run(
         app,
-        debug=True,
+        # Off unless opted in: debug mode exposes the Werkzeug console, which is
+        # remote code execution on a public host. Set DEBUG=1 for local work.
+        debug=os.environ.get("DEBUG") == "1",
         host=os.environ.get("HOST", "127.0.0.1"),
         port=PORT,
         allow_unsafe_werkzeug=True,

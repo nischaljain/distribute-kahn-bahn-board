@@ -212,6 +212,7 @@ docker compose down -v    # stop and wipe Postgres data too
 | `HOST` | `127.0.0.1` | bind address; set `0.0.0.0` to accept external connections |
 | `DATABASE_URL` | `postgresql+psycopg2://kanban:kanban@localhost:5432/kanban` | Postgres connection |
 | `KAFKA_BROKER` | `localhost:9092` | Kafka bootstrap server |
+| `DEBUG` | unset (off) | set `DEBUG=1` for local development only — debug mode exposes the Werkzeug console, which is remote code execution on a public host |
 
 If no broker is reachable at startup, the app logs `running in single-node mode` and falls back
 to broadcasting directly. Tabs on that one node still sync; multi-node sync requires Kafka.
