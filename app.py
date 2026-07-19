@@ -1,15 +1,22 @@
 """Application entry point for the Kanban board server."""
 
 import json
+import os
 
 from flask import Flask, abort, jsonify, render_template, request
 from flask_socketio import SocketIO
-from kafka import KafkaProducer
+from kafka import KafkaConsumer, KafkaProducer
 
 from models import Board, Column, Task, db
 
 KAFKA_BROKER = "localhost:9092"
 BOARD_EVENTS_TOPIC = "board-events"
+
+# One process per server node; the port makes each node's identity unique.
+PORT = int(os.environ.get("PORT", "5001"))
+# Unique consumer group per node so every node receives EVERY event (fan-out,
+# not load-balancing). A shared group would split events and break real-time.
+CONSUMER_GROUP = f"node-{PORT}"
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///kanban.db"
@@ -51,6 +58,27 @@ def broadcast_board_changed():
     """Push a change signal to every connected browser so each re-fetches.
     Only the Kafka consumer calls this — keeps a single broadcast path."""
     socketio.emit("board_changed")
+
+
+def consume_board_events():
+    """Consumer role: fan every event out to this node's browsers, including the
+    ones this node published. Blocks forever, so it runs as a background task.
+
+    auto_offset_reset="latest": a new group starts at the end of the log rather
+    than replaying history, which would re-broadcast changes already applied.
+    """
+    consumer = KafkaConsumer(
+        BOARD_EVENTS_TOPIC,
+        bootstrap_servers=KAFKA_BROKER,
+        group_id=CONSUMER_GROUP,
+        auto_offset_reset="latest",
+        value_deserializer=lambda raw: json.loads(raw.decode("utf-8")),
+    )
+    print(f"Kafka consumer listening as {CONSUMER_GROUP}", flush=True)
+
+    for message in consumer:
+        print(f"Consumed offset {message.offset}: {message.value}", flush=True)
+        broadcast_board_changed()
 
 
 @app.route("/api/boards", methods=["GET", "POST"])
@@ -203,6 +231,16 @@ def move_task(task_id):
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+    # Runs alongside the server; calling it directly would block startup forever.
+    socketio.start_background_task(consume_board_events)
     # socketio.run replaces app.run to handle the WebSocket upgrade handshake.
     # allow_unsafe_werkzeug: opt in to the dev server for WebSockets (local only).
-    socketio.run(app, debug=True, port=5001, allow_unsafe_werkzeug=True)
+    # use_reloader: the reloader forks a second process, which would start a rival
+    # consumer that steals events while holding no WebSocket connections.
+    socketio.run(
+        app,
+        debug=True,
+        port=PORT,
+        allow_unsafe_werkzeug=True,
+        use_reloader=False,
+    )

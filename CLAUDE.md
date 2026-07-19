@@ -130,4 +130,19 @@ docker exec kafka /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server localhost:9092
 ```
 
-_Multi-node Flask commands to be added as Phase 3 progresses._
+```bash
+# Run two server nodes (Kafka must be up and the topic created first).
+# PORT sets both the listen port and the Kafka consumer group (node-<PORT>),
+# so each process gets its own group and receives every event.
+./venv/bin/python app.py              # node A -> http://127.0.0.1:5001
+PORT=5002 ./venv/bin/python app.py    # node B -> http://127.0.0.1:5002
+
+# Stop both.
+lsof -tiTCP:5001 -sTCP:LISTEN | xargs kill -9
+lsof -tiTCP:5002 -sTCP:LISTEN | xargs kill -9
+
+# Prove cross-node sync: open a tab on each port, drag a card in one, watch
+# the other update. Server logs should show BOTH nodes consuming the same offset.
+docker exec kafka /opt/kafka/bin/kafka-consumer-groups.sh \
+  --list --bootstrap-server localhost:9092   # expect node-5001 and node-5002
+```

@@ -88,3 +88,75 @@ When it becomes real, the fixes (roughly in order of reach-for):
 
 **Decision:** accept the thundering herd at current scale; reach for push-full-state first
 if/when load makes it measurable.
+
+---
+
+## Consumer groups: why each server node needs its own (Phase 3)
+
+The single most important line of Kafka config in this project, and the one that fails
+*silently* if you get it wrong.
+
+### The rule
+
+> Kafka delivers each message to **every consumer group**, but to only **one consumer
+> *within* a group.**
+
+The group (`group_id`, just a string) is Kafka's unit of **load-balancing** — the mechanism
+that lets you scale consumption by splitting work across a team of consumers.
+
+### Why load-balancing is the wrong default *here*
+
+Our goal is **fan-out**, not work-splitting. Every Flask process must receive *every* event,
+because each one holds a different set of browser WebSockets and must push to its own tabs.
+
+- **Shared group** (`group_id="kanban"` on both nodes) → Kafka sees one team and splits the
+  stream: event 0 to node A, event 1 to node B. A change reaches only one node's tabs; the
+  other node's tabs go stale. **Nothing errors** — it just quietly half-works.
+- **Unique group per node** (`node-5001`, `node-5002`) → Kafka sees two independent teams and
+  sends the full stream to both. Each node fans out to its own tabs. Correct.
+
+We derive it from the port, which is already unique per process:
+
+```python
+PORT = int(os.environ.get("PORT", "5001"))
+CONSUMER_GROUP = f"node-{PORT}"
+```
+
+Verified: with both nodes running, `kafka-consumer-groups.sh --list` shows `node-5001` and
+`node-5002`, and both server logs consume the **same** offsets (0,1,2,3) — proof of fan-out
+rather than splitting.
+
+### Terminology that caused confusion
+
+"Server" means two different things in this project. Worth stating plainly:
+
+- **Kafka broker** — the Kafka program in Docker. We run exactly **one**. It stores the topic.
+  With brokers/controllers it forms the **Kafka cluster**.
+- **Flask app node** — our Python process (`app.py`). We run **two** (5001, 5002).
+
+Producers and consumers are **clients** of the cluster, never part of it. So `group_id` is a
+label worn by our *Flask processes*, not by the broker. One broker, two group ids.
+
+### `auto_offset_reset="latest"`, not `"earliest"`
+
+Answers "where do I start when this group has no saved bookmark?" — which is every fresh
+start, since each node's group is new. `"earliest"` would replay the whole topic on boot and
+re-broadcast changes already applied, making every tab re-fetch repeatedly for ancient
+events. `"latest"` starts at the end: only events published while we're running. Live sync
+cares about *now*.
+
+### Gotcha: the Flask reloader forks a second process
+
+The consumer loop (`for message in consumer`) **blocks forever**, so it runs via
+`socketio.start_background_task(...)`. Calling it directly would hang startup and the web
+server would never begin serving.
+
+But with `debug=True`, Flask's **auto-reloader** runs the app as **two** processes: a parent
+that watches files and a child that actually serves. Our script starts the consumer at module
+level, so *both* would start one — and the parent, which holds **zero WebSocket
+connections**, could win events from the group and emit into the void. Real-time would look
+randomly broken with no error anywhere.
+
+Fix: `use_reloader=False`. Costs auto-restart on file edits; buys one process and correct
+behavior. (The alternative — guarding on `WERKZEUG_RUN_MAIN` — is more machinery than a
+teaching project needs.)
