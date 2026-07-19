@@ -7,6 +7,7 @@ from flask import Flask, abort, jsonify, render_template, request
 from flask_socketio import SocketIO
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import NoBrokersAvailable
+from sqlalchemy.orm import joinedload
 
 from models import Board, Column, Task, db
 
@@ -123,7 +124,14 @@ def boards():
 
 @app.route("/api/boards/<int:board_id>", methods=["GET", "PATCH", "DELETE"])
 def board(board_id):
-    board = db.session.get(Board, board_id) or abort(404)
+    # Eager-load the tree: the nested loop below reads every column's tasks, which
+    # lazy loading would satisfy with one query per column (N+1). joinedload pulls
+    # the whole board in a single round trip, which dominates cost over a network.
+    board = db.session.get(
+        Board,
+        board_id,
+        options=[joinedload(Board.columns).joinedload(Column.tasks)],
+    ) or abort(404)
 
     if request.method == "PATCH":
         data = request.get_json() or {}

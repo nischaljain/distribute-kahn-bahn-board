@@ -224,3 +224,88 @@ Postgres alone isn't sufficient. Two things still bind us to one host:
 - **Flask binds `127.0.0.1`**, reachable only from its own machine.
 
 Both need real LAN addresses before the two-laptop demo works.
+
+---
+
+## The N+1 query problem: a bug that only appeared once deployed
+
+After deploying, the UI took seconds to update after every card move. It looked like slow
+hosting. It wasn't — it was our code, and the bug had been there since Phase 1.
+
+### Measuring first
+
+The deployed numbers pointed away from the host immediately:
+
+| Request | Time |
+|---|---|
+| static page (no database) | 0.098s |
+| `GET /api/boards/1` | 1.9s |
+| `POST` a card | 1.9s |
+
+TCP connect was 0.014s, and a page with no database access returned in under 100ms. So the
+server and network were fine; ~1.8s was being spent talking to the database. Instrumenting
+SQLAlchemy showed why — **one board fetch issued six separate queries**:
+
+```
+1. 524 ms  SELECT board...      <- the board
+2. 262 ms  SELECT "column"...   <- its columns
+3. 262 ms  SELECT task...       <- tasks for column 1
+4. 262 ms  SELECT task...       <- tasks for column 2
+5. 262 ms  SELECT task...       <- tasks for column 3
+6. 327 ms  SELECT task...       <- tasks for column 4
+```
+
+### What N+1 is
+
+Fetch **1** parent, then loop over its children, and the ORM silently issues **N** more
+queries — one per child. Ours came from this line:
+
+```python
+board_data["columns"] = [
+    {**column.to_dict(), "tasks": [task.to_dict() for task in column.tasks]}
+    for column in board.columns
+]
+```
+
+`column.tasks` is a **lazy relationship**: SQLAlchemy doesn't load it until touched, and we
+touch it once per column inside a loop. Comfortable Python, six network round trips.
+
+**Why it stayed hidden for three phases:** against a local database each query costs ~0.5ms,
+so all six totalled ~3ms — invisible. Move the database to another datacenter and each costs
+~262ms. The bug never changed; the latency just made it legible. This is the most common way
+N+1 gets discovered — in production, not in development.
+
+### Choosing the fix with numbers, not instinct
+
+Eager loading tells SQLAlchemy to fetch the tree up front. Two strategies, measured against
+the real (remote) database:
+
+| Strategy | Queries | Time |
+|---|---|---|
+| lazy (before) | 6 | 6.79s |
+| `selectinload` | 3 | 1.23s |
+| **`joinedload`** (chosen) | **1** | **0.58s** |
+
+`selectinload` issues a second `SELECT ... WHERE id IN (...)` per level; `joinedload` pulls
+everything in one `LEFT JOIN`. Conventional advice favours `selectinload` for collections
+because `joinedload` multiplies rows (a cartesian product across levels), but here **round
+trips dominate everything** — 1 trip beat 3 by 2x. With a board this small, the row
+duplication costs nothing.
+
+The lesson isn't "always use joinedload." It's that the right answer depends on whether your
+bottleneck is **latency** or **data volume**, and you find out by measuring, not by recalling
+a rule.
+
+Verified after the change: columns and tasks still come back in correct `position` order with
+no duplicate rows leaking through the de-duplication.
+
+### What this doesn't fix
+
+Moving a card is still **two** HTTP round trips — the mutation, then the re-fetch that the
+signal pattern requires — and there's no optimistic UI, so nothing moves on screen until both
+finish. Remaining improvements, in order of value:
+
+- **Optimistic UI** — move the card in the DOM immediately, reconcile when the response
+  arrives. Removes *perceived* latency entirely; the largest UX win available.
+- **Co-locate the app and database** in the same region. Pure configuration.
+- **Push full state** (documented above) — removes the second round trip.
