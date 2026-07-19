@@ -6,10 +6,11 @@ import os
 from flask import Flask, abort, jsonify, render_template, request
 from flask_socketio import SocketIO
 from kafka import KafkaConsumer, KafkaProducer
+from kafka.errors import NoBrokersAvailable
 
 from models import Board, Column, Task, db
 
-KAFKA_BROKER = "localhost:9092"
+KAFKA_BROKER = os.environ.get("KAFKA_BROKER", "localhost:9092")
 BOARD_EVENTS_TOPIC = "board-events"
 
 # Postgres runs as a service (see docker-compose.yml), so nodes on other hosts can
@@ -32,12 +33,24 @@ db.init_app(app)
 # Adds a WebSocket layer for broadcasting to connected browsers; REST routes unchanged.
 socketio = SocketIO(app)
 
-# One producer for the app's lifetime — connections are expensive to open per request.
-# value_serializer turns each Python event into the JSON bytes Kafka stores on the wire.
-producer = KafkaProducer(
-    bootstrap_servers=KAFKA_BROKER,
-    value_serializer=lambda event: json.dumps(event).encode("utf-8"),
-)
+def create_producer():
+    """One producer for the app's lifetime — connections are expensive per request.
+    value_serializer turns each event into the JSON bytes Kafka stores on the wire.
+
+    Returns None when no broker is reachable, which puts the app in single-node
+    mode (see publish_board_changed). Multi-node sync requires Kafka.
+    """
+    try:
+        return KafkaProducer(
+            bootstrap_servers=KAFKA_BROKER,
+            value_serializer=lambda event: json.dumps(event).encode("utf-8"),
+        )
+    except NoBrokersAvailable:
+        print(f"No Kafka broker at {KAFKA_BROKER}; running in single-node mode", flush=True)
+        return None
+
+
+producer = create_producer()
 
 
 @app.route("/")
@@ -56,7 +69,14 @@ def on_disconnect():
 
 
 def publish_board_changed():
-    """Producer role: append a change event to the topic. Called after a DB commit."""
+    """Producer role: append a change event to the topic. Called after a DB commit.
+
+    Without a broker this node has no siblings to stay in sync with, so it
+    broadcasts directly. That shortcut is only safe while running alone.
+    """
+    if producer is None:
+        broadcast_board_changed()
+        return
     producer.send(BOARD_EVENTS_TOPIC, {"type": "board_changed"})
 
 
@@ -237,8 +257,9 @@ def move_task(task_id):
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    # Runs alongside the server; calling it directly would block startup forever.
-    socketio.start_background_task(consume_board_events)
+    if producer is not None:
+        # Runs alongside the server; calling it directly would block startup forever.
+        socketio.start_background_task(consume_board_events)
     # socketio.run replaces app.run to handle the WebSocket upgrade handshake.
     # allow_unsafe_werkzeug: opt in to the dev server for WebSockets (local only).
     # use_reloader: the reloader forks a second process, which would start a rival
@@ -246,6 +267,7 @@ if __name__ == "__main__":
     socketio.run(
         app,
         debug=True,
+        host=os.environ.get("HOST", "127.0.0.1"),
         port=PORT,
         allow_unsafe_werkzeug=True,
         use_reloader=False,
