@@ -306,6 +306,75 @@ signal pattern requires — and there's no optimistic UI, so nothing moves on sc
 finish. Remaining improvements, in order of value:
 
 - **Optimistic UI** — move the card in the DOM immediately, reconcile when the response
-  arrives. Removes *perceived* latency entirely; the largest UX win available.
+  arrives. Removes *perceived* latency entirely; the largest UX win available. **Done — see
+  below.**
 - **Co-locate the app and database** in the same region. Pure configuration.
 - **Push full state** (documented above) — removes the second round trip.
+
+---
+
+## Optimistic UI: stop making the user wait for the network
+
+Even after the N+1 fix, a card move cost roughly `PATCH (~1.8s) + GET (~0.75s)`. The card
+didn't visibly move until both finished, so the board felt broken regardless of how fast the
+backend got.
+
+### The change
+
+Previously every action was *server-first*: send the request, await it, re-fetch, re-render.
+The UI was a pure mirror of the server, which is simple but means **every interaction costs a
+round trip before anything happens on screen**.
+
+Now the client keeps the board in a local variable and applies the edit **immediately**:
+
+```js
+async function optimistically(applyLocally, persist) {
+  applyLocally();            // mutate local state
+  renderBoard(board);        // paint it right now
+  try {
+    const response = await persist();          // then tell the server
+    if (!response.ok) throw new Error(response.status);
+  } catch (error) {
+    await loadBoard();       // we guessed wrong — fall back to the server's truth
+  }
+}
+```
+
+Three things make this safe rather than reckless:
+
+1. **The server stays authoritative.** The optimistic edit is a *prediction*. The existing
+   `board_changed` → `loadBoard()` path already re-fetches after every change, so the server's
+   version overwrites the prediction a second later. Reconciliation was free — we'd already
+   built it.
+2. **Failures self-heal.** Any non-OK response or network error triggers `loadBoard()`, which
+   discards the bad prediction and restores the truth.
+3. **Placeholder ids.** A newly created card has no server id yet, so it gets `id: null` and is
+   rendered non-draggable with its delete disabled — it can't be addressed by an API that
+   doesn't know about it. The reconcile replaces it with the real row within ~a second.
+
+`renumber()` recalculates contiguous `position` values locally, mirroring what the server does,
+so the prediction matches the eventual truth instead of flickering into place.
+
+### Measured in a real browser
+
+Both paths update the DOM **synchronously**, before any network call resolves:
+
+| Action | DOM updated in |
+|---|---|
+| Add a card | **0.8 ms** |
+| Move a card between columns | **1.2 ms** |
+
+Verified afterwards that the server state and DOM state matched exactly, that no placeholder
+ids survived reconciliation, and that the console was clean.
+
+Perceived latency went from ~2000ms to under 2ms — roughly a thousandfold — **without the
+backend getting any faster**. Worth sitting with: the biggest performance win in this project
+came from changing *when* we render, not from optimising a query.
+
+### The trade-off
+
+The client now duplicates a little server logic (position renumbering), which is exactly the
+coupling we rejected when we chose signal-over-delta broadcasting. The difference is scope:
+this duplication is a *disposable prediction* that gets overwritten a second later, not a
+source of truth the client must maintain correctly forever. If the prediction is wrong, the
+reconcile silently fixes it.
