@@ -210,7 +210,7 @@ docker compose down -v    # stop and wipe Postgres data too
 | Env var | Default | Purpose |
 |---|---|---|
 | `PORT` | `5001` | listen port **and** consumer group id (`node-<PORT>`) |
-| `HOST` | `127.0.0.1` | bind address; set `0.0.0.0` to accept external connections |
+| `HOST` | `0.0.0.0` | bind address — all interfaces, since hosting platforms only route to `0.0.0.0`. Set `127.0.0.1` to restrict to your own machine |
 | `DATABASE_URL` | `postgresql+psycopg2://kanban:kanban@localhost:5432/kanban` | Postgres connection |
 | `KAFKA_BROKER` | `localhost:9092` | Kafka bootstrap server |
 | `DEBUG` | unset (off) | set `DEBUG=1` for local development only — debug mode exposes the Werkzeug console, which is remote code execution on a public host |

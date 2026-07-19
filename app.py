@@ -269,7 +269,9 @@ if __name__ == "__main__":
         # Off unless opted in: debug mode exposes the Werkzeug console, which is
         # remote code execution on a public host. Set DEBUG=1 for local work.
         debug=os.environ.get("DEBUG") == "1",
-        host=os.environ.get("HOST", "127.0.0.1"),
+        # Bind all interfaces by default: hosting platforms route to 0.0.0.0 and
+        # never see a loopback-only listener. Set HOST=127.0.0.1 to stay local.
+        host=os.environ.get("HOST", "0.0.0.0"),
         port=PORT,
         allow_unsafe_werkzeug=True,
         use_reloader=False,
