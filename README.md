@@ -129,7 +129,8 @@ Four rules the code is built to enforce. Each exists because breaking it causes 
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.9–3.11 (`.python-version` pins 3.11.9 for deployments; `kafka-python` 2.0.2
+  does not import on Python 3.12+)
 - Docker Desktop (for Kafka and Postgres)
 
 ### Setup
