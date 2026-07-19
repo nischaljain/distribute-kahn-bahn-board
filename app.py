@@ -12,6 +12,12 @@ from models import Board, Column, Task, db
 KAFKA_BROKER = "localhost:9092"
 BOARD_EVENTS_TOPIC = "board-events"
 
+# Postgres runs as a service (see docker-compose.yml), so nodes on other hosts can
+# share it — override DATABASE_URL to point at whichever machine runs the database.
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL", "postgresql+psycopg2://kanban:kanban@localhost:5432/kanban"
+)
+
 # One process per server node; the port makes each node's identity unique.
 PORT = int(os.environ.get("PORT", "5001"))
 # Unique consumer group per node so every node receives EVERY event (fan-out,
@@ -19,7 +25,7 @@ PORT = int(os.environ.get("PORT", "5001"))
 CONSUMER_GROUP = f"node-{PORT}"
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///kanban.db"
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 
 db.init_app(app)
 

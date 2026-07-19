@@ -160,3 +160,67 @@ randomly broken with no error anywhere.
 Fix: `use_reloader=False`. Costs auto-restart on file edits; buys one process and correct
 behavior. (The alternative — guarding on `WERKZEUG_RUN_MAIN` — is more machinery than a
 teaching project needs.)
+
+---
+
+## SQLite → PostgreSQL: why we switched (Phase 4)
+
+Phase 3 made the *event* layer distributed, but the storage layer still quietly assumed one
+machine. This closes that gap.
+
+### The real reason isn't performance — it's embedded vs client-server
+
+- **SQLite** is an **embedded** database: a *library* running inside your process, reading and
+  writing a **file on local disk**. There is no database program. "Connecting" is opening a file.
+- **PostgreSQL** is a **client-server** database: a **separate program** you reach **over the
+  network** (port 5432) — architecturally the same shape as Kafka.
+
+Our two nodes worked on SQLite only because they happened to run on the **same laptop** and
+open the same file path. The moment node A and node B live on different machines — the entire
+point of this project — they cannot share a SQLite file at all. Not slowly; not at all. (Putting
+SQLite on a network filesystem is a well-known route to corruption; its locking isn't reliable
+over NFS.) So the switch buys **possibility**, not speed.
+
+Secondary win, concurrency: SQLite takes a write lock on the **whole database file**, so writes
+serialize globally and you eventually see `database is locked`. Postgres uses **row-level
+locking** and **MVCC** (readers see a consistent snapshot instead of blocking), so writes to
+different rows proceed in parallel.
+
+### The ORM earned its keep
+
+Swapping engines took **one line** — `SQLALCHEMY_DATABASE_URI` from `sqlite:///kanban.db` to
+`postgresql+psycopg2://kanban:kanban@localhost:5432/kanban`. Not a single query or model
+changed, because we wrote SQLAlchemy models instead of raw SQL. The URL shape itself shows the
+shift: the SQLite URL has no host, port, or credentials — because there was no server.
+
+`psycopg2-binary` is the **driver** (database adapter) that speaks Postgres' wire protocol —
+the same role `kafka-python` plays for Kafka. The `-binary` build ships precompiled, so there's
+no C toolchain needed.
+
+### Things Postgres surfaced that SQLite hid
+
+- **`column` is a reserved SQL keyword.** Our `Column` model maps to a table literally named
+  `column`, which is a syntax error unquoted. SQLAlchemy quotes identifiers automatically
+  (`REFERENCES "column"(id)`), so it just worked — but raw SQL would have broken.
+- **Auto-increment is a `SEQUENCE`** (`nextval('task_id_seq')`), a different mechanism from
+  SQLite's implicit ROWID. Same model definition, different DDL per engine.
+- **Types are enforced.** `character varying(200)` really rejects a longer title; SQLite's
+  flexible typing would have stored it happily.
+
+### Operational notes
+
+- Postgres gets a **named volume** (`postgres-data`), so `docker compose down` no longer
+  destroys data — unlike the Kafka topic, which has none and must be recreated each session.
+  Use `docker compose down -v` to wipe deliberately.
+- Postgres starts **empty**, so `seed.py` creates the schema and the starter board. Existing
+  SQLite data did **not** migrate; for a real system that would need a migration step.
+- `DATABASE_URL` is env-overridable (like `PORT`) so a node on another host can point at
+  whichever machine runs the database.
+
+### Still to do for a true multi-machine setup
+
+Postgres alone isn't sufficient. Two things still bind us to one host:
+- **Kafka advertises `localhost:9092`**, so a remote node would be told to connect to *itself*.
+- **Flask binds `127.0.0.1`**, reachable only from its own machine.
+
+Both need real LAN addresses before the two-laptop demo works.

@@ -1,7 +1,24 @@
-# Runs a single-node Apache Kafka broker for local development.
+# Runs the backing services for local development: Kafka (cross-node events)
+# and PostgreSQL (shared state).
 # Start:  docker compose up -d
 # Stop:   docker compose down
 services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    ports:
+      # host:container — lets our Flask app (on the host) reach Postgres at localhost:5432.
+      - "5432:5432"
+    environment:
+      # Read only on first startup: the image creates this user and an empty database.
+      # Local dev credentials — not a secret, and not reused anywhere else.
+      POSTGRES_USER: kanban
+      POSTGRES_PASSWORD: kanban
+      POSTGRES_DB: kanban
+    volumes:
+      # Named volume keeps the data outside the container, so `down` no longer wipes it.
+      - postgres-data:/var/lib/postgresql/data
+
   kafka:
     image: apache/kafka:3.9.0
     container_name: kafka
@@ -27,3 +44,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+# Declares the named volume mounted by postgres above; Docker manages its storage.
+volumes:
+  postgres-data:

@@ -25,7 +25,7 @@ scratch. See "How to work in this repo" below — it is as important as the arch
 | Flask | Python web framework | serves pages, handles REST API requests |
 | Flask-SocketIO | Python library | gives Flask WebSocket powers + easy broadcasting |
 | WebSocket | a network protocol | persistent two-way (full-duplex) link between browser and server |
-| SQLite → PostgreSQL | databases | permanent storage of boards/columns/tasks (start SQLite) |
+| PostgreSQL | a standalone client-server database (separate program) | permanent storage of boards/columns/tasks, shared by every node (migrated from SQLite in Phase 4) |
 | SQLAlchemy | Python ORM (object-relational mapper) | lets us work in Python objects instead of raw SQL |
 | Apache Kafka | a standalone event-streaming platform (separate program) | the ordered "news wire" servers publish to / read from, to sync across nodes |
 | Docker / Docker Compose | containerization tooling | runs Kafka (and friends) locally without manual install |
@@ -38,7 +38,7 @@ Kafka producer when it publishes a change, and *acts as* a consumer when it read
 ```
 Tab 1 ──WebSocket──► Server A          (browser ↔ server link = WebSocket)
                         │
-                  save to DB (SQLAlchemy → SQLite/Postgres)
+                  save to DB (SQLAlchemy → Postgres)
                         │
                   Server A publishes "card moved" to a Kafka topic   (acts as PRODUCER)
                         │
@@ -118,16 +118,28 @@ curl -s -X POST http://127.0.0.1:5001/api/boards \
 ```
 
 ```bash
-# Kafka (Phase 3) — needs Docker Desktop running
-docker compose up -d      # start the single Kafka broker (KRaft mode, port 9092)
-docker compose ps         # check it's Up
+# Backing services (Kafka + Postgres) — needs Docker Desktop running
+docker compose up -d      # start the Kafka broker (port 9092) and Postgres (port 5432)
+docker compose ps         # check both are Up
 docker logs kafka         # broker logs; look for "Kafka Server started"
-docker compose down       # stop and remove it
+docker compose down       # stop and remove them
 
 # Create the event topic (no named volume, so `down` deletes it — recreate after each up).
 docker exec kafka /opt/kafka/bin/kafka-topics.sh \
   --create --topic board-events --partitions 1 --replication-factor 1 \
   --bootstrap-server localhost:9092
+```
+
+```bash
+# Postgres — unlike the Kafka topic, data survives `down` (named volume postgres-data).
+./venv/bin/python seed.py   # create tables + starter board; safe to re-run
+
+# Inspect the database with psql (Postgres' CLI client).
+docker exec postgres psql -U kanban -d kanban -c '\dt'        # list tables
+docker exec postgres psql -U kanban -d kanban -c 'SELECT * FROM task;'
+
+# Wipe everything and start clean (removes the named volume too).
+docker compose down -v
 ```
 
 ```bash
